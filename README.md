@@ -1,370 +1,430 @@
-# 🛡️ Beginner Guide: Building a Secure Hybrid SOC Lab with Active Directory & Microsoft Sentinel
-## 🎯 What You Will Build (In Simple Terms)
+# 🛡️ Hybrid SOC Lab – Active Directory + Microsoft Sentinel (Beginner Friendly)
 
-You will create:
-A small company network with Active Directory
+## 📌 Overview
 
-Improve its security and availability
+This project is a **hands-on security and infrastructure lab** designed to help beginners understand how to:
 
-Send logs to Microsoft Sentinel
+- Build an **on-prem Active Directory environment**
+- Identify security and availability weaknesses
+- Improve resilience using **Domain Controller redundancy**
+- Centralize logs in **Azure**
+- Deploy **Microsoft Sentinel** as a SIEM
+- Detect and investigate **real authentication attacks**
 
-Detect and investigate real attacks
+The lab mirrors a **real consulting / enterprise scenario** using cost-effective tools.
 
-You do not need prior Sentinel or SOC experience.
+---
 
-##  🧠 Scenario (Why We Are Doing This)
+## 🏦 Scenario
 
-A small financial company has:
+A small financial organization relies on an on-premises Active Directory environment but has:
 
-An insecure on-prem Active Directory
+- No centralized logging
+- No real-time attack detection
+- A single Domain Controller (single point of failure)
+- No SOC or monitoring capability
 
-No central monitoring
+You are asked to **assess the environment**, **improve security**, and **validate the solution** without redesigning everything or increasing costs significantly.
 
-No disaster recovery
+---
 
-No way to detect attacks
+## 🧱 Architecture Overview
 
-You are asked to:
+### On-Prem (VMware Workstation)
+- **DC01** – Primary Domain Controller  
+- **DC02** – Secondary Domain Controller (Disaster Recovery)  
+- **Windows 10/11 Client** – User activity simulation  
+- **Active Directory Domain:** `northbridge.local`
 
-Assess the current setup
+### Azure
+- **Log Analytics Workspace**
+- **Microsoft Sentinel**
+- **Azure Arc**
+- **Azure Monitor Agent (AMA)**
+- **Data Collection Rules (DCRs)**
 
-Improve security with minimal cost
+---
 
-Make it resilient
+## 🧰 Prerequisites
 
-Prove it works
+### Local Machine
+- Windows PC
+- VMware Workstation
+- Minimum 16 GB RAM recommended
 
-# PART 1 — DESIGN THE EXISTING (INSECURE) INFRASTRUCTURE
-## 1.1 Tools You Need
-Local Machine
+### ISOs
+- Windows Server 2022
+- Windows 10 or Windows 11
 
-Windows PC with:
+### Azure
+- Azure subscription (free tier is fine)
+- Contributor permissions
 
-VMware Workstation
+---
 
-Minimum 16 GB RAM recommended
+## PART 1 — Build the Existing (Insecure) Infrastructure
 
-## Software ISOs
+### 1.1 Configure VMware Networking
 
-Windows Server 2022 ISO
-
-Windows 10 / Windows 11 ISO
-
-## Azure
-
-Free Azure account
-
-Contributor access
-
-## 1.2 Create the Virtual Network (VMware)
-
-In VMware Workstation:
-
-Open Virtual Network Editor
-
-Ensure VMnet8 (NAT) exists
-
-Enable:
-
-NAT
-
-DHCP (optional)
-
-Note subnet (example):
-
-192.168.40.0/24
+1. Open **VMware Virtual Network Editor**
+2. Ensure **VMnet8 (NAT)** exists
+3. Enable:
+   - NAT
+   - DHCP (optional)
+4. Note subnet (example):
+   192.168.40.0/24
 
 
-👉 NAT allows internet access without breaking AD.
+---
 
-## 1.3 Create Domain Controller (DC01)
-VM Settings
+### 1.2 Create DC01 (Primary Domain Controller)
 
-Name: DC01
+**VM Settings**
+- Name: `DC01`
+- OS: Windows Server 2022
+- CPU: 2
+- RAM: 4–8 GB
+- Network: VMnet8 (NAT)
 
-OS: Windows Server 2022
+**Static IP Configuration**
 
-CPU: 2
 
-RAM: 4–8 GB
-
-Network: VMnet8 (NAT)
-
-Static IP (IMPORTANT)
-
-On DC01:
-
-IP: 192.168.40.10
-Subnet: 255.255.255.0
+IP Address: 192.168.40.10
+Subnet Mask: 255.255.255.0
 Gateway: 192.168.40.2
 DNS: 192.168.40.10
 
-## 1.4 Install Active Directory
 
-On DC01:
+---
 
-Server Manager → Add Roles
+### 1.3 Install Active Directory
 
-Install:
+1. Open **Server Manager**
+2. Add Roles:
+   - Active Directory Domain Services
+   - DNS
+3. Promote to Domain Controller
+4. Create domain:
 
-Active Directory Domain Services
-
-DNS
-
-Promote to Domain Controller
-
-Create domain:
 
 northbridge.local
 
+5. Reboot
 
-Reboot.
+---
 
-## 1.5 Existing Problems (Before Improvements)
+### 1.4 Baseline Issues (Before Improvement)
 
-At this stage:
+- ❌ Single Domain Controller
+- ❌ No centralized logging
+- ❌ No attack detection
+- ❌ No disaster recovery
+- ❌ No monitoring or alerting
 
-❌ Only one DC
+---
 
-❌ Logs stored locally
+## PART 2 — Improve Availability (Disaster Recovery)
 
-❌ No attack detection
+### 2.1 Create DC02 (Secondary Domain Controller)
 
-❌ No monitoring
+**VM Settings**
+- Name: `DC02`
+- OS: Windows Server 2022
+- Network: VMnet8
 
-❌ Single point of failure
+**Static IP**
 
-This is the baseline.
 
-# PART 2 — IMPROVE AVAILABILITY (DISASTER RECOVERY)
-## 2.1 Create Second Domain Controller (DC02)
-## VM Settings
-
-Name: DC02
-
-OS: Windows Server 2022
-
-Network: VMnet8
-
-## Static IP
-IP: 192.168.40.11
+IP Address: 192.168.40.11
 DNS: 192.168.40.10
 
-## 2.2 Join DC02 to Domain
 
-System → Rename PC → DC02
+---
 
-Join domain: northbridge.local
+### 2.2 Join DC02 to the Domain
 
-Reboot
+1. Rename computer to `DC02`
+2. Join domain `northbridge.local`
+3. Reboot
 
-## 2.3 Promote DC02
+---
 
-Install AD DS role
+### 2.3 Promote DC02
 
-Promote as Additional Domain Controller
+1. Install AD DS role
+2. Promote as **Additional Domain Controller**
+3. Use existing domain
+4. Reboot
 
-Use existing domain
+---
 
-Reboot
-
-## 2.4 Validate DR
+### 2.4 Validate Replication
 
 On DC01:
+```powershell
 
-repadmin /replsummary
+## repadmin /replsummary
 
-
-Test:
+Test failover:
 
 Power off DC01
 
-Log into DC02
+Authenticate via DC02
 
-Authentication still works
+✅ Disaster recovery validated
 
-✅ Disaster recovery achieved
+---
 
-# PART 3 — ADD A CLIENT MACHINE
-## 3.1 Create Client VM
+## PART 3 — Client Machine Setup (User Activity Simulation)
 
-Name: WIN11-CLIENT
+## 3.1 Create the Windows Client VM
 
-OS: Windows 10/11
+This VM represents a standard corporate user workstation and is used to simulate authentication activity and attacks.
 
-Network: VMnet8
+**VM Configuration**
+- Name: `WIN11-CLIENT`
+- OS: Windows 10 Pro or Windows 11 Pro
+- CPU: 2
+- RAM: 4 GB
+- Network: **VMnet8 (NAT)**
 
-## IP (DHCP OK)
+---
 
-DNS:
+### 3.2 Configure Networking
 
+You can use **DHCP** or a static IP.
+
+**DNS Servers (IMPORTANT)**
 192.168.40.10
 192.168.40.11
 
-# 3.2 Join Domain
+yaml
+Copy code
 
-Join domain northbridge.local
+These point to DC01 and DC02.
 
-Reboot
+---
 
-Log in with domain user
+### 3.3 Join the Domain
 
-# PART 4 — CONNECT ON-PREM TO AZURE (SECURITY VISIBILITY)
-## 4.1 Create Log Analytics Workspace
+1. Open **System Properties**
+2. Rename computer to `WIN11-CLIENT`
+3. Join domain:
+northbridge.local
 
-Azure Portal:
+yaml
+Copy code
+4. Reboot
+5. Log in using a domain user account
 
-Log Analytics → Create
+✅ Client can now authenticate against Active Directory.
 
-Name:
+---
 
-law-nb-soc
+## PART 4 — Centralized Logging & Microsoft Sentinel
 
+### 4.1 Create Log Analytics Workspace
 
-Region: same as Sentinel later
+In Azure Portal:
 
-## 4.2 Enable Microsoft Sentinel
+1. Go to **Log Analytics Workspaces**
+2. Click **Create**
+3. Use:
+Name: law-nb-soc
+Region: Same as Sentinel
 
-Microsoft Sentinel → Create
+yaml
+Copy code
 
-Select workspace law-nb-soc
+This workspace will store all security logs.
 
-## 4.3 Install Azure Arc Agent (DC01 & DC02)
+---
 
-Azure Portal:
+### 4.2 Enable Microsoft Sentinel
 
-Azure Arc → Machines → Add
+1. Go to **Microsoft Sentinel**
+2. Click **Create**
+3. Select workspace: `law-nb-soc`
 
-Generate onboarding script
+This converts the workspace into a SIEM.
 
-Run script on:
+---
 
-DC01
+### 4.3 Onboard Domain Controllers to Azure Arc
 
-DC02
+Azure Arc allows Azure services to manage on-prem servers.
 
-Verify:
+#### Steps:
+1. Azure Portal → **Azure Arc**
+2. Machines → **Add**
+3. Choose **Add a single server**
+4. Generate the onboarding PowerShell script
+5. Run the script **as Administrator** on:
+- DC01
+- DC02
 
+#### Verify Connection
+```powershell
 "C:\Program Files\AzureConnectedMachineAgent\azcmagent.exe" show
+Status should show:
 
+nginx
+Copy code
+Connected
+4.4 Install Azure Monitor Agent (AMA)
+AMA collects logs from on-prem servers.
 
-Status must be Connected.
+For each Domain Controller:
 
-## 4.4 Install Azure Monitor Agent (AMA)
+Azure Portal → Azure Arc → Machines
 
-For each DC:
+Select DC01 / DC02
 
-Azure Arc → Machine → Extensions
+Extensions → Add
 
-Add AzureMonitorWindowsAgent
+Install:
 
-## 4.5 Create Data Collection Rule (DCR)
+nginx
+Copy code
+AzureMonitorWindowsAgent
+4.5 Create Data Collection Rule (DCR)
+The DCR defines what logs are collected.
 
-Azure Portal:
+Azure Portal → Monitor
 
-Monitor → Data Collection Rules → Create
+Data Collection Rules → Create
 
 Platform: Windows
 
-Data source:
-
+Data Sources
 Windows Event Logs
 
-Log: Security
+Log name:
 
-Destination:
+nginx
+Copy code
+Security
+Destination
+Azure Monitor Logs
 
-Log Analytics → law-nb-soc
+Workspace: law-nb-soc
 
-Assign resources:
+Resources
+Assign:
 
 DC01
 
 DC02
 
-Wait 5–10 minutes.
+⏱ Wait 5–10 minutes for ingestion.
 
-## 4.6 Validate Logs
+4.6 Validate Log Ingestion
+Run in Microsoft Sentinel → Logs:
 
-In Sentinel:
-
+Heartbeat (Agent Health)
+kql
+Copy code
 Heartbeat
 | summarize count() by Computer
-
-
-Then:
-
+Security Logs
+kql
+Copy code
 SecurityEvent
 | summarize count() by Computer
+You should see DC01 and DC02.
 
-# PART 5 — ATTACK DETECTION (SOC WORK)
-## 5.1 Simulate an Attack
+PART 5 — Attack Simulation & Detection
+5.1 Simulate Brute Force Authentication
+From the client VM or a DC:
 
-From client or DC:
-
+powershell
+Copy code
 for ($i=1; $i -le 6; $i++) {
- net use \\DC01\IPC$ /user:northbridge\BadUser WrongPass123
+  net use \\DC01\IPC$ /user:northbridge\BadUser WrongPass123
 }
+This generates Event ID 4625 (Failed Logon).
 
-## 5.2 Detect Failed Logons
+5.2 Detect Failed Logons (KQL)
+kql
+Copy code
 SecurityEvent
 | where EventID == 4625
-| summarize FailedAttempts=count()
+| summarize FailedAttempts = count()
   by Account, Computer, bin(TimeGenerated, 5m)
 | where FailedAttempts >= 5
+This confirms the attack is visible.
 
-## 5.3 Create Analytics Rule
+5.3 Create Sentinel Analytics Rule
+Microsoft Sentinel → Analytics
 
-Type: Scheduled
+Create → Scheduled rule
 
-Run every 5 minutes
+Settings
 
-Create incident
+Run every: 5 minutes
 
-Map entities (Account, Host)
+Lookup period: 5 minutes
 
-## 5.4 Investigate Incident
+Create incidents: Enabled
 
-Sentinel → Incidents:
+Entity Mapping
 
-Review timeline
+Account → Account
 
-Review entities
+Host → Computer
 
-Confirm brute-force attempt
+Enable the rule.
 
-# PART 6 — DOCUMENT OUTCOMES
-Improvements Achieved
+5.4 Validate Incident Creation
+Microsoft Sentinel → Incidents
+
+Confirm:
+
+New incident created
+
+Severity: Medium
+
+Account & Host populated
+
+Open the incident and review:
+
+Timeline
+
+Entities
+
+Raw events
+
+PART 6 — Outcomes & Validation
+Security Improvements Achieved
 Area	Before	After
-Availability	1 DC	2 DCs
-Logging	Local	Central
+Availability	Single DC	Dual DC (HA)
+Logging	Local only	Centralized
 Detection	None	Real-time
-DR	None	Tested
 SOC	None	Sentinel
+DR	Untested	Validated
 
-## What You Learned
-
+What This Lab Demonstrates
 Active Directory architecture
 
 Disaster recovery design
 
-Azure Arc
+Azure Arc onboarding
 
-Azure Monitor Agent
+Azure Monitor Agent & DCRs
 
-Microsoft Sentinel
+Microsoft Sentinel operations
 
-KQL
+KQL detection & hunting
 
-SOC workflows
+SOC-style incident response
 
-## Final Note (For Learners)
+PART 7 — Next Enhancements (Optional)
+Automation playbooks (Logic Apps)
 
-This lab mirrors:
+Defender for Endpoint integration
 
-Real SOC onboarding
+MITRE ATT&CK mapping
 
-Real Sentinel mistakes
+Sentinel Workbooks (dashboards)
 
-Real enterprise constraints
-
+Email / Teams alerting
